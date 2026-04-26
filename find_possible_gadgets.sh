@@ -39,9 +39,9 @@ done
 
 patterns_len=${#patterns[@]}
 
-if [ $patterns_len -gt 1 ] && ([ $show_coincidences -eq 1 ] || [ $show_unique_coincidences -eq 1 ])
+if [ $patterns_len -gt 1 ] && [ $show_unique_coincidences -eq 1 ]
 then
-        echo "ERROR: Can't currently use multiple patterns with -s or -u"
+        echo "ERROR: Can't currently use multiple patterns with or -u"
         exit 1
 fi
 
@@ -67,7 +67,7 @@ pattern=${patterns[0]}
 coincidences=$(grep -B $context -E "ret$" $file | grep -E "$pattern")
 addresses=$(echo "$coincidences" | sed "s/:.*//g")
 
-if [ $show_coincidences -eq 0 ] && [ $show_unique_coincidences -eq 0 ]
+if [ $show_unique_coincidences -eq 0 ]
 then
         for addr in $addresses
         do
@@ -90,16 +90,21 @@ then
 
                 if [ -n "$matches_next" ]
                 then
-                        ret_line_num=$(echo "$gadget" | awk 'NR > 3 && /ret$/{print NR; exit}')
-                        echo "$gadget" | awk "NR >= 1 && NR <= ${ret_line_num}"
+                        if [ $show_coincidences -eq 1 ]
+                        then
+                                echo "$gadget" | \
+                                        awk "NR > $BEFORE_PATTERN && NR <= $(($patterns_len + $BEFORE_PATTERN))"
+                        else
+                                ret_line_num=$(echo "$gadget" | \
+                                                awk "NR > $BEFORE_PATTERN && /ret$/{print NR; exit}")
+                                echo "$gadget" | awk "NR >= 1 && NR <= ${ret_line_num}"
+                        fi
+
                         echo -e "--------------------------------------------------------------------------------\n"
                 fi
         done
 else
-        if [ $show_unique_coincidences -eq 0 ]
-        then
-                echo "$coincidences"
-        elif [ $show_coincidences -eq 0 ]
+        if [ $show_coincidences -eq 0 ]
         then
                 offset=$(echo "$coincidences" | head -n 1 | \
                         awk 'match($0, /^.*:/) {print RLENGTH-1}')
