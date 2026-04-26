@@ -63,45 +63,37 @@ then
         exit 0
 fi
 
-i=0
-
-pattern=${patterns[$i]}
+pattern=${patterns[0]}
 coincidences=$(grep -B $context -E "ret$" $file | grep -E "$pattern")
 addresses=$(echo "$coincidences" | sed "s/:.*//g")
 
-while [ $i -lt $(($patterns_len - 1)) ]
-do
-        ((i++))
-
-        pattern=${patterns[$i]}
-
-        coincidences=""
-        for base_addr in $addresses
-        do
-                next=$(grep -A 1 "^[ ]*$base_addr" $file)
-                coincidence=$(echo "$next" | grep -E "$pattern")
-                if [ -n "$coincidence" ]
-                then
-                        addr=$(echo "$coincidence" | sed "s/:.*//g")
-                        coincidences=$(echo -e "$coincidences\n$addr")
-                fi
-        done
-
-        addresses=$(echo "$coincidences" | sed "s/:.*//g")
-done
-
 if [ $show_coincidences -eq 0 ] && [ $show_unique_coincidences -eq 0 ]
 then
-        before_num=$(($patterns_len - 1 + $BEFORE_PATTERN))
-        after_num=$(($context - $patterns_len + 1))
         for addr in $addresses
         do
-                gadget=$(grep -B $before_num -A $after_num "^[ ]*$addr" $file | \
-                                grep --color=always -E "${patterns[0]}|$")
-                ret_line_num=$(echo "$gadget" | awk 'NR > 3 && /ret$/{print NR; exit}')
+                gadget=$(grep --color=always -B $BEFORE_PATTERN -A $context "^[ ]*$addr" $file)
 
-                echo "$gadget" | awk "NR >= 1 && NR <= ${ret_line_num}"
-                echo -e "--------------------------------------------------------------------------------\n"
+                matches_next="yes"
+                i=1
+                while [ $i -lt $patterns_len ]
+                do
+                        pattern=${patterns[i]}
+                        expected_line=$(echo "$gadget" | awk "NR == $(($BEFORE_PATTERN + $i + 1))")
+                        matches_next=$(echo "$expected_line" | grep -E "$pattern")
+                        if [ -z "$matches_next" ]
+                        then
+                                break
+                        fi
+
+                        ((i++))
+                done
+
+                if [ -n "$matches_next" ]
+                then
+                        ret_line_num=$(echo "$gadget" | awk 'NR > 3 && /ret$/{print NR; exit}')
+                        echo "$gadget" | awk "NR >= 1 && NR <= ${ret_line_num}"
+                        echo -e "--------------------------------------------------------------------------------\n"
+                fi
         done
 else
         if [ $show_unique_coincidences -eq 0 ]
