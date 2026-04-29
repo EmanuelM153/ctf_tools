@@ -77,7 +77,7 @@ if [ $show_unique_coincidences -eq 1 ]
 then
         offset=$(echo "$coincidences" | head -n 1 | \
                 awk 'match($0, /^.*:/) {print RLENGTH-1}')
-        echo "$coincidences" | uniq -c -f $offset
+        echo "$coincidences" | uniq -c -f $offset 2>/dev/null
         exit 0
 fi
 
@@ -141,10 +141,25 @@ function check_gadget_validity()
 
 if [ $show_json -eq 1 ]
 then
-        echo "["
+        echo "{"
+        echo -e "\t\"file\": \"$(basename $file)\","
+        echo -e "\t\"context_window\": $context,"
+        echo -e "\t\"patterns\": ["
+
+        echo -e "\t\t\"${patterns[0]}\""
+        i=1
+        while [ $i -lt $patterns_len ]
+        do
+                echo -e "\t\t,\"${patterns[$i]}\""
+                ((i++))
+        done
+        echo -e "\t],"
+
+        echo -e "\t\"gadgets\": ["
 fi
 
 first_gadget=1
+num_gadgets=0
 for addr in $addresses
 do
         gadget=$(grep --color=always -B $BEFORE_PATTERN -A $context "^[ ]*$addr" $file)
@@ -153,6 +168,7 @@ do
 
         if [ $valid_gadget -eq 1 ]
         then
+                ((num_gadgets++))
                 if [ $show_coincidences -eq 1 ]
                 then
                         echo "$gadget" | \
@@ -167,9 +183,9 @@ do
                                 echo ','
                         fi
 
-                        echo -e "\t["
+                        echo -e "\t\t["
                         gadget2json "$gadget"
-                        echo -en "\t]"
+                        echo -en "\t\t]"
                 else
                         ret_line_num=$(echo "$gadget" | \
                                         awk "NR > $BEFORE_PATTERN && /ret$/{print NR; exit}")
@@ -183,5 +199,7 @@ done
 
 if [ $show_json -eq 1 ]
 then
-        echo -e "\n]"
+        echo -e "\n\t],"
+        echo -e "\t\"num_gadgets\": $num_gadgets"
+        echo -e "}"
 fi
