@@ -6,12 +6,13 @@ script_name=$(basename $0)
 context=5
 show_coincidences=0
 show_unique_coincidences=0
+show_json=0
 
-usage="usage: $script_name -f file [[-p <pattern>] ...] [-c <context>] [-s|-u]"
+usage="usage: $script_name -f file [[-p <pattern>] ...] [-c <context>] [-s|-u|-j]"
 
 patterns=()
 
-while getopts 'f:p:c:su' OPTION
+while getopts 'f:p:c:suj' OPTION
 do
         case "${OPTION}" in
                 s)
@@ -19,6 +20,9 @@ do
                         ;;
                 u)
                         show_unique_coincidences=1
+                        ;;
+                j)
+                        show_json=1
                         ;;
                 f)
                         file=$OPTARG
@@ -41,7 +45,7 @@ patterns_len=${#patterns[@]}
 
 if [ $patterns_len -gt 1 ] && [ $show_unique_coincidences -eq 1 ]
 then
-        echo "ERROR: Can't currently use multiple patterns with or -u"
+        echo "ERROR: Can't currently use multiple patterns with -u flag"
         exit 1
 fi
 
@@ -77,6 +81,36 @@ then
         exit 0
 fi
 
+function gadget2json()
+{
+        gadget="$1"
+        clean_gadget=$(echo "$gadget" | \
+                        awk "NR > $BEFORE_PATTERN {print; if (/ret$/) exit}")
+
+        IFSBK=$IFS
+        IFS=$'\n'
+        for line in $clean_gadget
+        do
+                echo -e '\t\t{'
+
+                # That weird regular expression repeated in both addr and instruction
+                # is used to remove ANSI colors
+                addr=$(echo "$line" | sed "s/:.*//g" | sed -E "s/\x1B\[[0-9;]*[mGK]//g" \
+                       | sed "s/^[ ]*//g")
+                instruction=$(echo "$line" | sed -E "s/.*:[\t ]*([0-9a-f][0-9a-f][ ])+[\t ]*//g" \
+                       | sed -E "s/[ ]+/ /g" | sed -E "s/\x1B\[[0-9;]*[mGK]//g")
+
+                echo -e "\t\t\t\"offset\": \"$addr\",\n\t\t\t\"instruction\": \"$instruction\""
+
+                if [ $(echo "$instruction" | grep "ret") ]
+                then
+                        echo -e '\t\t}'
+                else
+                        echo -e '\t\t},'
+                fi
+        done
+        IFS=$IFSBK
+}
 
 function check_gadget_validity()
 {
@@ -105,6 +139,12 @@ function check_gadget_validity()
         fi
 }
 
+if [ $show_json -eq 1 ]
+then
+        echo "["
+fi
+
+first_gadget=1
 for addr in $addresses
 do
         gadget=$(grep --color=always -B $BEFORE_PATTERN -A $context "^[ ]*$addr" $file)
@@ -117,12 +157,31 @@ do
                 then
                         echo "$gadget" | \
                                 awk "NR > $BEFORE_PATTERN && NR <= $(($patterns_len + $BEFORE_PATTERN))"
+                        echo -e "--------------------------------------------------------------------------------\n"
+                elif [ $show_json -eq 1 ]
+                then
+                        if [ $first_gadget -eq 1 ]
+                        then
+                                first_gadget=0
+                        else
+                                echo ','
+                        fi
+
+                        echo -e "\t["
+                        gadget2json "$gadget"
+                        echo -en "\t]"
                 else
                         ret_line_num=$(echo "$gadget" | \
                                         awk "NR > $BEFORE_PATTERN && /ret$/{print NR; exit}")
-                        echo "$gadget" | awk "NR >= 1 && NR <= ${ret_line_num}"
+                        echo "$gadget" | awk "NR >= 1 && NR <= $ret_line_num"
+                        echo -e "--------------------------------------------------------------------------------\n"
                 fi
-
-                echo -e "--------------------------------------------------------------------------------\n"
         fi
+
+        ((i++))
 done
+
+if [ $show_json -eq 1 ]
+then
+        echo -e "\n]"
+fi
