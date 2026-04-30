@@ -8,7 +8,7 @@ show_coincidences=0
 show_unique_coincidences=0
 show_json=0
 
-usage="usage: $script_name -f file [[-p <pattern>] ...] [-c <context>] [-s|-u|-j]"
+usage="usage: $script_name -f <file> [[-p <pattern>] ...] [-c <context>] [-s|-u|-j]"
 
 patterns=()
 
